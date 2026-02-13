@@ -54,6 +54,28 @@
             margin-bottom: 10px;
         }
 
+        #powerupInfo {
+            background: rgba(0,0,0,0.6);
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 5px;
+            font-size: 14px;
+            color: #feca57;
+        }
+
+        #powerupInfo {
+            background: rgba(0,0,0,0.6);
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .powerup-active {
+            color: #2ed573;
+            font-weight: bold;
+        }
+
         #controls {
             position: absolute;
             bottom: 10px;
@@ -127,15 +149,20 @@
         
         <div id="ui">
             <div id="levelInfo">
-                <div>Level: <span id="currentLevel">1</span> / 10</div>
+                <div>Level: <span id="currentLevel">1</span> / 20</div>
                 <div>Difficulty: <span id="difficulty" class="difficulty easy">Easy</span></div>
                 <div>Deaths: <span id="deaths">0</span></div>
                 <div>Checkpoints: <span id="checkpoints">0</span></div>
             </div>
+            <div id="powerupInfo">
+                <div id="speedBoostStatus"></div>
+                <div id="doubleJumpStatus"></div>
+            </div>
         </div>
 
         <div id="controls">
-            Controls: Arrow Keys / WASD to Move | SPACE to Jump | R to Restart Level
+            Controls: Arrow Keys / WASD - Move | SPACE - Jump (Double Jump when powered up) | R - Restart<br>
+            🟦 Ice (slippery) | 🟨 Disappearing | 🟪 Bounce Pad | 🟥 Speed Boost | 💠 Double Jump Pickup
         </div>
 
         <div id="gameOver">
@@ -174,10 +201,16 @@
             velocityX: 0,
             velocityY: 0,
             speed: 5,
+            baseSpeed: 5,
             jumpPower: 12,
+            baseJumpPower: 12,
             gravity: 0.5,
             onGround: false,
-            color: '#00d2ff'
+            color: '#00d2ff',
+            hasDoubleJump: false,
+            doubleJumpUsed: false,
+            speedBoost: false,
+            speedBoostTimer: 0
         };
 
         // Checkpoint
@@ -191,9 +224,15 @@
         const keys = {};
         window.addEventListener('keydown', (e) => {
             keys[e.key.toLowerCase()] = true;
-            if (e.key === ' ' && player.onGround) {
-                player.velocityY = -player.jumpPower;
-                player.onGround = false;
+            if (e.key === ' ') {
+                if (player.onGround) {
+                    player.velocityY = -player.jumpPower;
+                    player.onGround = false;
+                    player.doubleJumpUsed = false;
+                } else if (player.hasDoubleJump && !player.doubleJumpUsed) {
+                    player.velocityY = -player.jumpPower;
+                    player.doubleJumpUsed = true;
+                }
             }
             if (e.key.toLowerCase() === 'r') {
                 restartLevel();
@@ -409,102 +448,51 @@
                 ],
                 goal: {x: 745, y: 150, width: 40, height: 40},
                 checkpointPos: {x: 320, y: 340}
-            }
-        ];
+            },
+            // Level 11 - Disappearing Platforms
+            {
+                difficulty: 'hard',
+                platforms: [
+                    {x: 0, y: 550, width: 100, height: 50, type: 'normal'},
+                    {x: 150, y: 480, width: 60, height: 15, type: 'disappearing', timer: 0, visible: true, interval: 120},
+                    {x: 260, y: 420, width: 60, height: 15, type: 'disappearing', timer: 60, visible: false, interval: 120},
+                    {x: 370, y: 360, width: 60, height: 15, type: 'disappearing', timer: 0, visible: true, interval: 120},
+                    {x: 480, y: 300, width: 60, height: 15, type: 'disappearing', timer: 60, visible: false, interval: 120},
+                    {x: 590, y: 240, width: 60, height: 15, type: 'normal'},
+                    {x: 700, y: 180, width: 100, height: 50, type: 'normal'}
+                ],
+                killZones: [
+                    {x: 0, y: 580, width: 800, height: 20}
+                ],
+                movingPlatforms: [],
+                goal: {x: 730, y: 130, width: 40, height: 40},
+                checkpointPos: {x: 370, y: 330}
+            },
+            // Level 12 - Bounce Pads
+            {
+                difficulty: 'medium',
+                platforms: [
+                    {x: 0, y: 550, width: 100, height: 50, type: 'normal'},
+                    {x: 150, y: 500, width: 80, height: 15, type: 'normal'},
+                    {x: 280, y: 500, width: 60, height: 15, type: 'bounce'},
+                    {x: 400, y: 400, width: 80, height: 15, type: 'normal'},
+                    {x: 530, y: 400, width: 60, height: 15, type: 'bounce'},
+                    {x: 650, y: 200, width: 150, height: 50, type: 'normal'}
+                ],
+                killZones: [
+                    {x: 0, y: 580, width: 800, height: 20}
+                ],
+                movingPlatforms: [],
+                bouncePads: [
+                    {x: 280, y: 485, width: 60, height: 15, power: 18},
+                    {x: 530, y: 385, width: 60, height: 15, power: 20}
+                ],
+                goal: {x: 700, y: 150, width: 40, height: 40}
+            },
+            // Level 13 - Speed Zone Challenge
+            {
+                difficulty: 'hard',
+                platforms: [
+                    {x: 0, y: 550, width: 80, height: 50, type: 'normal'},
+                    {x: 200, y: 480, width: 100, height: 15, 
 
-        let currentLevel = levels[0];
-
-        function resetPlayer() {
-            player.x = checkpoint.x;
-            player.y = checkpoint.y;
-            player.velocityX = 0;
-            player.velocityY = 0;
-            player.onGround = false;
-        }
-
-        function loadLevel(levelNum) {
-            gameState.currentLevel = levelNum;
-            currentLevel = levels[levelNum - 1];
-            checkpoint = {x: 50, y: 500, active: false};
-            resetPlayer();
-            
-            // Update UI
-            document.getElementById('currentLevel').textContent = levelNum;
-            const diffSpan = document.getElementById('difficulty');
-            diffSpan.textContent = currentLevel.difficulty.charAt(0).toUpperCase() + currentLevel.difficulty.slice(1);
-            diffSpan.className = 'difficulty ' + currentLevel.difficulty;
-            document.getElementById('checkpoints').textContent = gameState.checkpoints;
-        }
-
-        function restartLevel() {
-            document.getElementById('gameOver').style.display = 'none';
-            gameState.gameRunning = true;
-            resetPlayer();
-        }
-
-        function restartGame() {
-            gameState.currentLevel = 1;
-            gameState.deaths = 0;
-            gameState.checkpoints = 0;
-            gameState.gameRunning = true;
-            document.getElementById('gameOver').style.display = 'none';
-            document.getElementById('victory').style.display = 'none';
-            document.getElementById('deaths').textContent = '0';
-            loadLevel(1);
-        }
-
-        function checkCollision(rect1, rect2) {
-            return rect1.x < rect2.x + rect2.width &&
-                   rect1.x + rect1.width > rect2.x &&
-                   rect1.y < rect2.y + rect2.height &&
-                   rect1.y + rect1.height > rect2.y;
-        }
-
-        function update() {
-            if (!gameState.gameRunning) return;
-
-            // Handle input
-            if (keys['arrowleft'] || keys['a']) {
-                player.velocityX = -player.speed;
-            } else if (keys['arrowright'] || keys['d']) {
-                player.velocityX = player.speed;
-            } else {
-                player.velocityX = 0;
-            }
-
-            // Apply gravity
-            player.velocityY += player.gravity;
-
-            // Update position
-            player.x += player.velocityX;
-            player.y += player.velocityY;
-
-            // Check ground collision
-            player.onGround = false;
-
-            // Static platforms
-            currentLevel.platforms.forEach(platform => {
-                if (checkCollision(player, platform)) {
-                    if (player.velocityY > 0) {
-                        player.y = platform.y - player.height;
-                        player.velocityY = 0;
-                        player.onGround = true;
-                    }
-                }
-            });
-
-            // Moving platforms
-            currentLevel.movingPlatforms.forEach(platform => {
-                // Update platform position
-                platform.x += platform.speed * platform.direction;
-                if (platform.x >= platform.endX || platform.x <= platform.startX) {
-                    platform.direction *= -1;
-                }
-
-                if (checkCollision(player, platform)) {
-                    if (player.velocityY > 0 && player.y + player.height - player.velocityY <= platform.y) {
-                        player.y = platform.y - player.height;
-                        player.velocityY = 0;
-                        player.onGround = true;
-                        player.x += platform.speed * platform.direction;
-                
